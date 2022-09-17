@@ -7,6 +7,7 @@ main:
 include("Craze.jl")
 
 using .Craze
+import .Craze: @handler
 
 struct Foo <: Event end
 struct Bar <: Event end
@@ -20,13 +21,12 @@ end
 Input = Union{Foo,Bar}
 
 # Handlers
-function (::Handler{Input,State})(e::Foo, s::State)
-    println("handle Foo")
-end
-
-function (::Handler{Input,State})(e::Bar, s::State)
-    println("handle Bar")
-end
+@handler {Input}(e::Bar, s::State) = println("handle: ", e)
+@handler {Input}(e::Foo, s::State) =
+    begin
+        println("handle: ", e, " start")
+        println("handle: ", e, " end")
+    end
 
 p = Process{Input,State}(State(0), Handler{Input,State}())
 handle(p, Foo())
