@@ -31,3 +31,6 @@ end
 p = Process{Input,State}(State(0), Handler{Input,State}())
 handle(p, Foo())
 handle(p, Bar())
+send(p, Foo())
+start(p)
+sleep(5000)
