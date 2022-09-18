@@ -11,39 +11,53 @@ struct Stop <: ControlEvent end
 
 struct Handler{T,S} end
 
-
-struct Process{T<:Event,S}
+mutable struct Process{T<:Event,S}
     state::S
-    handler::Handler{T,S}
+    handler::Handler{Union{T,ControlEvent},S}
     chan::Channel{Union{T,ControlEvent}}
-    Process{T,S}(state::S, handler::Handler{T,S}) where {T<:Event,S} =
-        new(state, handler, Channel{Union{T,ControlEvent}}(1))
+    @atomic started::Bool
+    @atomic stopped::Bool
+    Process{T,S}(state::S) where {T<:Event,S} =
+        new(state,
+            Handler{Union{T,ControlEvent},S}(),
+            Channel{Union{T,ControlEvent}}(1),
+            false,
+            false)
 end
 
 function send(p::Process{T}, e::T) where {T}
     put!(p.chan, e)
 end
 
+
 stop(p::Process) = put!(p.chan, Stop())
 
-
 function start(p::Process{T,S}) where {T,S}
+    (_, started) = @atomicreplace p.started false => true
+    if started
+        put!(p.chan, Start())
+    else
+        error("process is already started")
+    end
     @async while true
-        e = take!(p.chan)
-        if isa(e, Stop)
-            if Stop <: T
-                handle(p, e)
+        event = take!(p.chan)
+        if isa(event, Stop) && hasmethod(p.handler, Tuple{Stop,S})
+            (_, stopped) = @atomicreplace p.stopped false => true
+            if stopped
+                p.handler(event, p.state)
+            else
+                error("process is already stoped")
             end
             break
-        elseif isa(e, Start) && Start <: T
-            handle(p, e)
+        elseif isa(event, Start) && hasmethod(p.handler, Tuple{Start,S})
+            p.handler(event, p.state)
         else
-            handle(p, e)
+            p.handler(event, p.state)
         end
     end
 end
 
-function handle(p::Process{T,S}, event::T) where {S} where {E<:T} where {T}
+function handle(p::Process{T,S}, event::T) where {T,S}
     p.handler(event, p.state)
 end
 
@@ -56,7 +70,7 @@ macro handler(ex::Expr)
     stateVar = Symbol(ex.args[1].args[3].args[1])
     body = ex.args[2]
     quote
-        function (::Handler{$__module__.$inputType,$__module__.$stateType})($eventVar::$__module__.$eventType, $stateVar::$__module__.$stateType)
+        function (::Handler{Union{$__module__.$inputType,ControlEvent},$__module__.$stateType})($eventVar::$__module__.$eventType, $stateVar::$__module__.$stateType)
             $body
         end
     end

@@ -18,7 +18,7 @@ mutable struct State
 end
 
 # API
-Input = Union{Foo,Bar,ControlEvent}
+Input = Union{Foo,Bar}
 
 # Handlers
 @handler {Input}(event::Bar, state::State) = println("handle: ", event, ", state: ", state)
@@ -28,9 +28,11 @@ Input = Union{Foo,Bar,ControlEvent}
         println("handle: ", e, " end")
     end
 
+@handler {Input}(event::Start, state::State) = println("process has been started")
 @handler {Input}(event::Stop, state::State) = println("process has been stopped")
 
-p = Process{Input,State}(State(0), Handler{Input,State}())
+p = Process{Input,State}(State(0))
+
 handle(p, Foo())
 handle(p, Bar())
 start(p)
