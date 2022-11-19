@@ -29,6 +29,9 @@ end
 stop(p::Process) = put!(p.chan, Stop())
 
 function start(p::Process{T,S}) where {T,S}
+    if p.stopped
+        error("process is stopped")
+    end
     (_, started) = @atomicreplace p.started false => true
     if started
         put!(p.chan, Start())
@@ -41,6 +44,7 @@ function start(p::Process{T,S}) where {T,S}
             (_, stopped) = @atomicreplace p.stopped false => true
             if stopped
                 p(event, p.state)
+                close(p.chan)
             else
                 error("process is already stoped")
             end
